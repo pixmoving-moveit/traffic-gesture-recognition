@@ -9,7 +9,7 @@ except Exception:
     README = ""
 VERSION = "0.0.1"
 
-requirments = ["tensorflow"]
+requirments = ["argparse", "numpy", "opencv-python", "tensorflow"]
 # requirments = ["click", "boto3", "appdirs", "grpcio", "pyyaml", "six"]
 
 # if sys.version_info.major < 3:
