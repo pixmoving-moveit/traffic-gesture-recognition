@@ -4,6 +4,7 @@ from skimage.io import imread, imsave
 import glob
 import sys
 
+from PIL import ImageFile
 
 def clip_before_detect(image, clip_area):
     rows = image.shape[0]
@@ -16,6 +17,8 @@ def clip_before_detect(image, clip_area):
 
 
 if __name__ == "__main__":
+
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
     parse = argparse.ArgumentParser()
     parse.add_argument("--imgs_dir", type=str)
     parse.add_argument("--output_dir", type=str, default='clip_video_output')
@@ -34,16 +37,17 @@ if __name__ == "__main__":
     path_list = glob.glob(imgs_dir)
 
     for item in path_list:
-        img = imread(item)
-        img = clip_before_detect(img, clip_area)
-        tmps = item.split('/')
-        tmp_path = os.path.join(tmps[-3], tmps[-2])
-        save_path = os.path.join(output_dir, tmp_path)
+        if item.endswith('.png'):
+            img = imread(item)
+            img = clip_before_detect(img, clip_area)
+            tmps = item.split('/')
+            tmp_path = os.path.join(tmps[-3], tmps[-2])
+            save_path = os.path.join(output_dir, tmp_path)
 
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
-        save_path = os.path.join(save_path, tmps[-1])
-        imsave(save_path, img)
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+            save_path = os.path.join(save_path, tmps[-1])
+            imsave(save_path, img)
 
 
 

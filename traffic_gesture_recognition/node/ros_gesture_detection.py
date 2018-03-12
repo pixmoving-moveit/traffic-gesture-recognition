@@ -18,7 +18,7 @@ from sensor_msgs.msg import Image
 from autoware_msgs.msg import image_obj
 
 from traffic_gesture_recognition.msg import police_gesture
-from ..models.inception_v4 import create_inception_v4
+from inception_v4 import create_inception_v4
 
 
 class GestureRecog:
@@ -97,8 +97,8 @@ class GestureRecog:
         y_bottom = img_rect.y + img_rect.height
         img = image[img_rect.x:x_right, img_rect.y:y_bottom]
 
-        zero_mean = (img - np.mean(img, axis=0))/129=8.
-        scaled_img = cv.resize(img, network_size)
+        zero_mean = (img - np.mean(img, axis=0))/128.
+        scaled_img = cv.resize(zero_mean, network_size)
         return scaled_img
 
     def publish_gesture(self, gesture=None):
@@ -118,7 +118,7 @@ class GestureRecog:
 
         # overlay here
         color = (0, 255, 0)
-        if gesture.gesture == 1
+        if gesture.gesture == 1:
             color = (0, 0, 255)
         cv.rect(img_gesture_overlay, (bb.x, bb.y), (bb.x+bb.width, bb.y+bb.height), color, thickness=3)
 
