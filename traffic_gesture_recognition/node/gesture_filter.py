@@ -37,5 +37,6 @@ class GestureFilter:
 
 
 if __name__ == "__main__":
+    rospy.init_node('gesture_to_traffic_signal')
     filter = GestureFilter()
     filter.spin()

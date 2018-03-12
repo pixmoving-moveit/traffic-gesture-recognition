@@ -24,13 +24,14 @@ from inception_v4 import create_inception_v4
 class GestureRecog:
     def __init__(self, debug=False):
         package_name = "traffic_gesture_recognition"
+        rospack = rospkg.RosPack()
         model_path_prefix = os.path.join(rospack.get_path(package_name), package_name, "models")
 
         self.policeman_verifier = create_inception_v4(nb_classes=2)
         self.gesture_dectector = create_inception_v4(nb_classes=2)        
 
         self.policeman_verifier.load_weights(os.path.join(model_path_prefix, "police_inceptionv4.45-0.28.hdf5"))
-        self.policeman_verifier.load_weights(os.path.join(model_path_prefix, "gesture_inceptionv4.45-0.28.hdf5"))
+        #self.gesture_dectector.load_weights(os.path.join(model_path_prefix, "gesture_inceptionv4.45-0.28.hdf5"))
 
         self.debug = debug
 
@@ -75,12 +76,15 @@ class GestureRecog:
         batch_inp = np.stack(arr, axis=0)
         batch_result, batch_confidence = predict_policeman(batch_inp)
 
+        print(batch_result)
+        print(batch_confidence)
+
         #assume there's only one policeman
         indices = [i for i, x in enumerate(batch_result) if x]
         
         detected_gesture = police_gesture()
         detected_gesture.header = bb.header
-        gesture = detect_gesture(arr[indices[0]]) if len(indices) else 0
+        gesture = detect_gesture(arr[indices[0]]) if len(indices) else (0, 1)
 
         self.detected_gesture.gesture = gesture[0]
         self.detected_gesture.confidence = gesture[1]
@@ -136,6 +140,7 @@ class GestureRecog:
         return (is_police, confidence)
 
     def detect_gesture(self, inp):
+        return (0, 1)
         result = self.gesture_dectector.predict(inp)
         gesture = np.argmax(result, axis=1)
         # @TODO: no need to compute twice, do lookup instead
@@ -144,5 +149,6 @@ class GestureRecog:
 
 
 if __name__ == "__main__":
+    rospy.init_node('gesture_detector')
     ges = GestureRecog(debug=False)
     ges.spin()
