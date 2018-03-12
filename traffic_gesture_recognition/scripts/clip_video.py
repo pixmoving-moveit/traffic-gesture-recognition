@@ -14,11 +14,7 @@ def parse_time(offset, t):
     return tt.strftime('%H:%M:%S.%f')
 
 
-def parse_video(video_path, srt_path, output_path, offset=0):
-
-    if not os.path.exists(output_path):
-        os.mkdir(output_path)
-
+def parse_srt_file(srt_path):
     parse_result = []
     with open(srt_path, 'r') as f:
         lines = f.readlines()
@@ -32,6 +28,15 @@ def parse_video(video_path, srt_path, output_path, offset=0):
         f.close()
 
     print(parse_result)
+    return parse_result
+
+
+def parse_video(video_path, srt_path, output_path, offset=0):
+
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
+
+    parse_result = parse_srt_file(srt_path)
 
     for i in range(0, len(parse_result) - 1, 3):
         id = parse_result[i]
