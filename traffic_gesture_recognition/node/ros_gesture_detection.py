@@ -18,7 +18,7 @@ from sensor_msgs.msg import Image
 from autoware_msgs.msg import image_obj
 
 from traffic_gesture_recognition.msg import police_gesture
-from inception_v4 import create_inception_v4
+import tensorflow as tf
 
 
 class GestureRecog:
@@ -27,11 +27,10 @@ class GestureRecog:
         rospack = rospkg.RosPack()
         model_path_prefix = os.path.join(rospack.get_path(package_name), package_name, "models")
 
-        self.policeman_verifier = create_inception_v4(nb_classes=2)
-        self.gesture_dectector = create_inception_v4(nb_classes=2)        
+        #self.policeman_verifier = tf.keras.models.load_model(os.path.join(model_path_prefix, "policeman.h5"))
+        self.gesture_dectector = tf.keras.models.load_model(os.path.join(model_path_prefix, "gesture.h5"))
 
-        self.policeman_verifier.load_weights(os.path.join(model_path_prefix, "police_inceptionv4.45-0.28.hdf5"))
-        #self.gesture_dectector.load_weights(os.path.join(model_path_prefix, "gesture_inceptionv4.45-0.28.hdf5"))
+        self.graph = tf.get_default_graph()
 
         self.debug = debug
 
@@ -52,7 +51,7 @@ class GestureRecog:
 
         self.bridge = CvBridge()
         self.image_to_process = None
-        self.incoming_bb = None
+        self.incoming_bbox = None
 
         self.detected_gesture = police_gesture()
         self.network_size = (299, 299) #square
@@ -60,8 +59,8 @@ class GestureRecog:
     def spin(self):
         rospy.spin()
 
-    def process(self, image, bb):
-        if not data.type == "person":
+    def process(self, image, bbox):
+        if not bbox.type == "person":
             return
         try:
             self.image_to_process = self.bridge.imgmsg_to_cv2(image, "bgr8")
@@ -70,39 +69,52 @@ class GestureRecog:
             return
 
         arr = []
-        for box in bb.obj:
-            new_box = self.correct_size(image, box)
+        for box in bbox.obj:
+            new_box = self.correct_size(self.image_to_process, box)
             arr.append(new_box)
+        if not len(arr):
+            return
+       
         batch_inp = np.stack(arr, axis=0)
-        batch_result, batch_confidence = predict_policeman(batch_inp)
+        batch_result, batch_confidence = self.predict_policeman(batch_inp)
 
-        print(batch_result)
-        print(batch_confidence)
+        print(batch_result, batch_confidence)
 
         #assume there's only one policeman
         indices = [i for i, x in enumerate(batch_result) if x]
         
         detected_gesture = police_gesture()
-        detected_gesture.header = bb.header
-        gesture = detect_gesture(arr[indices[0]]) if len(indices) else (0, 1)
+        detected_gesture.header = bbox.header
 
-        self.detected_gesture.gesture = gesture[0]
-        self.detected_gesture.confidence = gesture[1]
+        inp = []
+        for i in indices:
+            inp.append(arr[indices[i]])
+        if len(indices):
+            batch_inp = np.stack(inp, axis=0)
+            gesture = self.detect_gesture(batch_inp)
+        else:
+            gesture = ([0], [1])
 
-        publish_gesture(detected_gesture)
+        print("Gesture detected:", gesture)
+       
+        detected_gesture.gesture = np.any(gesture[0])
+        detected_gesture.confidence = -1;  # gesture[1]
+
+        self.detected_gesture = deepcopy(detected_gesture)
+
+        self.publish_gesture(detected_gesture)
         if self.debug and len(indices):
-            self.publish_gesture_overlay(image, detected_gesture, bb[indices[0]])
-
-        return detected_gesture
+            self.publish_gesture_overlay(self.image_to_process, detected_gesture, [bbox.obj[i] for i in indices])
 
     # img_rect is of type autoware_msgs::image_rect
     def correct_size(self, image, img_rect):
         x_right = img_rect.x + img_rect.width
         y_bottom = img_rect.y + img_rect.height
-        img = image[img_rect.x:x_right, img_rect.y:y_bottom]
+        img = image[img_rect.y:y_bottom, img_rect.x:x_right, :]
 
         zero_mean = (img - np.mean(img, axis=0))/128.
-        scaled_img = cv.resize(zero_mean, network_size)
+
+        scaled_img = cv.resize(zero_mean, self.network_size)
         return scaled_img
 
     def publish_gesture(self, gesture=None):
@@ -111,20 +123,21 @@ class GestureRecog:
         # @TODO: check confidence
         self.gesture_pub.publish(gesture)
 
-    def publish_gesture_overlay(self, image=None, gesture=None, bb=None):
-        if not image:
+    def publish_gesture_overlay(self, image=None, gesture=None, batch_bbox=None):
+        if image is None:
             image = self.image_to_process
-        if not gesture:
+        if gesture is None:
             gesture = self.detected_gesture
-        if not bb:
+        if batch_bbox is None:
             return
         img_gesture_overlay = np.copy(image)
 
         # overlay here
-        color = (0, 255, 0)
-        if gesture.gesture == 1:
-            color = (0, 0, 255)
-        cv.rect(img_gesture_overlay, (bb.x, bb.y), (bb.x+bb.width, bb.y+bb.height), color, thickness=3)
+        for bbox in batch_bbox:
+            color = (0, 255, 0)
+            if gesture.gesture == 1:
+                color = (0, 0, 255)
+            cv.rectangle(img_gesture_overlay, (bbox.x, bbox.y), (bbox.x+bbox.width, bbox.y+bbox.height), color, thickness=6)
 
         img = cv.resize(img_gesture_overlay, (320, 240))
 
@@ -133,15 +146,17 @@ class GestureRecog:
         self.gesture_overlay_pub.publish(msg)
 
     def predict_policeman(self, batch_inp):
-        batch_result = self.policeman_verifier.predict(batch_inp)
+        return ([1]*len(batch_inp), [1]*len(batch_inp))
+        with self.graph.as_default():
+            batch_result = self.policeman_verifier.predict(batch_inp)
         is_police = np.argmax(batch_result, axis=1)
         # @TODO: no need to compute twice, do lookup instead
         confidence = np.max(batch_result, axis=1)
         return (is_police, confidence)
 
     def detect_gesture(self, inp):
-        return (0, 1)
-        result = self.gesture_dectector.predict(inp)
+        with self.graph.as_default():
+            result = self.gesture_dectector.predict(inp)
         gesture = np.argmax(result, axis=1)
         # @TODO: no need to compute twice, do lookup instead
         confidence = np.max(result, axis=1)
@@ -150,5 +165,5 @@ class GestureRecog:
 
 if __name__ == "__main__":
     rospy.init_node('gesture_detector')
-    ges = GestureRecog(debug=False)
+    ges = GestureRecog(debug=True)
     ges.spin()
