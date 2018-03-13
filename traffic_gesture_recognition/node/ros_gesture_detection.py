@@ -14,6 +14,7 @@ import os
 
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
+from std_srvs.srv import SetBool, SetBoolResponse
 
 from autoware_msgs.msg import image_obj
 
@@ -23,16 +24,20 @@ import tensorflow as tf
 
 class GestureRecog:
     def __init__(self, debug=False):
+        self.debug_srv = rospy.Service('~/set_debug', SetBool, self.set_debug)
+        self.debug_srv = rospy.Service('~/verify_policeman', SetBool, self.verify_policeman)
+
         package_name = "traffic_gesture_recognition"
         rospack = rospkg.RosPack()
         model_path_prefix = os.path.join(rospack.get_path(package_name), package_name, "models")
 
-        #self.policeman_verifier = tf.keras.models.load_model(os.path.join(model_path_prefix, "policeman.h5"))
+        self.policeman_verifier = tf.keras.models.load_model(os.path.join(model_path_prefix, "policeman.h5"))
         self.gesture_dectector = tf.keras.models.load_model(os.path.join(model_path_prefix, "gesture.h5"))
 
         self.graph = tf.get_default_graph()
 
         self.debug = debug
+        self.check_policeman = False
 
         self.gesture_pub = rospy.Publisher("/police_gesture", police_gesture, queue_size=10)
         self.gesture_overlay_pub = rospy.Publisher("/police_gesture/image_overlay", Image, queue_size=10)
@@ -58,6 +63,14 @@ class GestureRecog:
 
     def spin(self):
         rospy.spin()
+
+    def set_debug(self, req):
+        self.debug = req.data
+        return SetBoolResponse(success=True, message="Change successful")
+
+    def verify_policeman(self, req):
+        self.check_policeman = req.data
+        return SetBoolResponse(success=True, message="Change successful")
 
     def process(self, image, bbox):
         if not bbox.type == "person":
@@ -86,9 +99,7 @@ class GestureRecog:
         detected_gesture = police_gesture()
         detected_gesture.header = bbox.header
 
-        inp = []
-        for i in indices:
-            inp.append(arr[indices[i]])
+        inp = [arr[i] for i in indices]
         if len(indices):
             batch_inp = np.stack(inp, axis=0)
             gesture = self.detect_gesture(batch_inp)
@@ -113,6 +124,8 @@ class GestureRecog:
         img = image[img_rect.y:y_bottom, img_rect.x:x_right, :]
 
         zero_mean = (img - np.mean(img, axis=0))/128.
+
+        print("Image shape", zero_mean.shape)
 
         scaled_img = cv.resize(zero_mean, self.network_size)
         return scaled_img
@@ -146,7 +159,8 @@ class GestureRecog:
         self.gesture_overlay_pub.publish(msg)
 
     def predict_policeman(self, batch_inp):
-        return ([1]*len(batch_inp), [1]*len(batch_inp))
+        if not self.check_policeman:
+            return ([1]*len(batch_inp), [1]*len(batch_inp))
         with self.graph.as_default():
             batch_result = self.policeman_verifier.predict(batch_inp)
         is_police = np.argmax(batch_result, axis=1)
