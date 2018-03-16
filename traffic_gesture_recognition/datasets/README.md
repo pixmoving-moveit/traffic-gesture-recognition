@@ -2,8 +2,8 @@
 
 We collected and labeled a dataset called Chinese Traffic Gesture Dataset(CTGD) for training a deep learning traffic gesture recognition model. This dataset contains more than 160000 traffic gesture images and more than 20000 images of policeman and pedestrian. The two subset in CTGD:
 
-* The traffic policeman dataset：
-* The traffic gesture dataset：
+* The traffic gesture dataset：(https://drive.google.com/file/d/1SsTdCuevGOh_IY6lsgXM2rzIYYLsKz0a/view?usp=sharing)
+* The traffic policeman dataset：(https://drive.google.com/file/d/15qp79kTAHkWYoXKC6IuDUhMC4G6YAoEx/view?usp=sharing)
 
 ## Traffic Policeman Dataset
 Images of traffic policeman and pedestrian are collected and labeled. You can download with this link:
